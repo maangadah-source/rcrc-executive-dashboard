@@ -112,7 +112,7 @@ def table_from_named_table(wb, sheet_name, table_name):
     ]
 
     for record in raw_records:
-        serial_number = str(record.get("S.No", "")).strip()
+        serial_number = (     str(record.get("S.No", "")).strip()     or str(record.get("S.no", "")).strip()     or str(record.get("S No", "")).strip()     or str(record.get("No", "")).strip() )
 
         # A non-empty S.No means a new meeting
         if serial_number:
@@ -167,6 +167,9 @@ def main():
     for key, table_name in tables.items():
         sheet = find_table_sheet(wb, table_name)
         data[key] = table_from_named_table(wb, sheet, table_name)
+
+if key == "previous":
+    print(f"[DEBUG] previous records = {len(data[key])}")
         print(f"[ok] {key}: {len(data[key])} rows from '{table_name}' ({sheet})")
 
     if len(data["schedulePriority"]) == 0:
