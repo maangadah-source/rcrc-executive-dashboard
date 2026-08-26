@@ -33,54 +33,116 @@ def fmt(v):
 
 
 def table_from_named_table(wb, sheet_name, table_name):
-    """Read an Excel Table object by name and return list[dict] of its rows.
-    For tables where records span multiple rows (e.g. Previous Tracker with
-    continuation bullet rows), merge continuation rows into the last record
-    that had a non-empty key identifier column (first column)."""
+    """
+    Read an Excel named table and return its rows as dictionaries.
+
+    For tblPreviousTracker only:
+    rows with a blank S.No are merged into the previous meeting record.
+    Other tables remain unchanged.
+    """
+
     ws = wb[sheet_name]
     tbl = ws.tables.get(table_name)
+
     if tbl is None:
-        raise ValueError(f"Table '{table_name}' not found in sheet '{sheet_name}'")
-    ref = tbl.ref
-    cells = ws[ref]
-    rows = [[c.value for c in row] for row in cells]
-    headers = [fmt(h) for h in rows[0]]
+        raise ValueError(
+            f"Table '{table_name}' not found in sheet '{sheet_name}'"
+        )
+
+    cells = ws[tbl.ref]
+    rows = [[cell.value for cell in row] for row in cells]
+
+    if not rows:
+        return []
+
+    headers = [fmt(value) for value in rows[0]]
+
+    # Make duplicate column headers unique
     seen = {}
     clean_headers = []
-    for h in headers:
-        if h in seen:
-            seen[h] += 1
-            clean_headers.append(f"{h}{seen[h]}")
-        else:
-            seen[h] = 1
-            clean_headers.append(h)
 
-    records = []
-    current = None
+    for header in headers:
+        if header in seen:
+            seen[header] += 1
+            clean_headers.append(f"{header}{seen[header]}")
+        else:
+            seen[header] = 1
+            clean_headers.append(header)
+
+    raw_records = []
+
     for row in rows[1:]:
-        if all(v is None or str(v).strip() == "" for v in row):
+        if all(
+            value is None or str(value).strip() == ""
+            for value in row
+        ):
             continue
-        first_col_value = row[0]
-        is_new_record = first_col_value is not None and str(first_col_value).strip() != ""
-        if is_new_record or current is None:
-            rec = {}
-            for h, v in zip(clean_headers, row):
-                if not h:
-                    continue
-                rec[h] = fmt(v)
-            records.append(rec)
-            current = rec
-        else:
-            for h, v in zip(clean_headers, row):
-                if not h or v is None or str(v).strip() == "":
-                    continue
-                text_val = fmt(v)
-                if h in current:
-                    current[h] = current[h] + "\n" + text_val
-                else:
-                    current[h] = text_val
-    return records
 
+        record = {}
+
+        for header, value in zip(clean_headers, row):
+            if not header:
+                continue
+
+            record[header] = fmt(value)
+
+        raw_records.append(record)
+
+    # Do not merge rows in any other Excel table
+    if table_name != "tblPreviousTracker":
+        return raw_records
+
+    merged_records = []
+    current_record = None
+
+    merge_fields = [
+        "Key Point Discussed",
+        "Action Items",
+        "Minutes of meeting",
+        "Minutes of meeting2",
+        "Minutes of meeting3",
+        "Minutes of meeting4",
+        "Minutes of meeting5",
+        "Minutes of meeting6",
+        "Minutes of meeting7",
+        "Minutes of meeting8",
+        "follow-up",
+        "their response note",
+        "Our Actions",
+    ]
+
+    for record in raw_records:
+        serial_number = str(record.get("S.No", "")).strip()
+
+        # A non-empty S.No means a new meeting
+        if serial_number:
+            current_record = dict(record)
+            merged_records.append(current_record)
+            continue
+
+        # Ignore orphan continuation rows
+        if current_record is None:
+            continue
+
+        # Merge continuation content into the previous meeting
+        for field in merge_fields:
+            new_value = str(record.get(field, "")).strip()
+
+            if not new_value:
+                continue
+
+            existing_value = str(
+                current_record.get(field, "")
+            ).strip()
+
+            if existing_value:
+                current_record[field] = (
+                    existing_value + "\n" + new_value
+                )
+            else:
+                current_record[field] = new_value
+
+    return merged_records
 
 def find_table_sheet(wb, table_name):
     for ws in wb.worksheets:
