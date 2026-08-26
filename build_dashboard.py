@@ -105,6 +105,8 @@ def main():
         sheet = find_table_sheet(wb, table_name)
         data[key] = table_from_named_table(wb, sheet, table_name)
         print(f"[ok] {key}: {len(data[key])} rows from '{table_name}' ({sheet})")
+        if key == "previous":
+            print(f"[debug] first 3 rows of previous: {data[key][:3]}")
 
     if len(data["schedulePriority"]) == 0:
         print("[error] schedulePriority table is empty, aborting to protect dashboard")
